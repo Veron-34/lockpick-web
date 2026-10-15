@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Lockpick — Взлом замка</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    background: #0a0604;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Georgia', serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
+    gap: 10px;
+  }
+  #game {
+    position: relative;
+    width: 100%;
+    max-width: 720px;
+    aspect-ratio: 3 / 2;
+    max-height: 65vh;
+  }
+  canvas {
+    width: 100%; height: 100%; display: block;
+    border-radius: 12px;
+    box-shadow: 0 0 60px rgba(200, 160, 60, 0.15);
+  }
+  #hud {
+    position: absolute; top: 8px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    color: #d4b870;
+    font-size: clamp(12px, 2.6vw, 15px);
+    text-shadow: 0 1px 4px #000;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #hud .right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+  .hud-btn {
+    background: linear-gradient(180deg, #2e1b0c, #1a1008);
+    border: 2px solid #6a4f1e;
+    color: #ffd970;
+    font-family: inherit;
+    font-size: clamp(10px, 2.1vw, 12px);
+    letter-spacing: 1px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: .15s;
+  }
+  .hud-btn:hover, .hud-btn:active {
+    background: linear-gradient(180deg, #6a4f1e, #3a2a10);
+    border-color: #ffd970;
+  }
+  #controls {
+    display: flex; gap: 14px; justify-content: center;
+    width: 100%; max-width: 720px; padding: 0 4px;
+  }
+  .ctl {
+    flex: 1; max-width: 140px; aspect-ratio: 1.4 / 1;
+    background: linear-gradient(180deg, #2e1b0c 0%, #1a1008 100%);
+    border: 2px solid #6a4f1e;
+    border-radius: 14px;
+    color: #ffd970;
+    font-size: clamp(24px, 6vw, 38px);
+    font-family: inherit; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255, 220, 140, 0.15), 0 4px 10px rgba(0, 0, 0, 0.5);
+    transition: transform .08s, background .15s, border-color .15s;
+  }
+  .ctl:active, .ctl.pressed {
+    background: linear-gradient(180deg, #6a4f1e 0%, #3a2a10 100%);
+    border-color: #ffd970;
+    transform: scale(0.96);
+  }
+  .ctl.up {
+    background: linear-gradient(180deg, #4a3810 0%, #2e1f08 100%);
+    border-color: #a8873a;
+    font-size: clamp(28px, 7vw, 44px);
+  }
+  .ctl.up:active, .ctl.up.pressed {
+    background: linear-gradient(180deg, #a8873a 0%, #6a4f1e 100%);
+    border-color: #ffd970;
+  }
+  #win-overlay {
+    position: absolute; inset: 0;
+    background: rgba(10, 6, 4, 0.94);
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    border-radius: 12px; color: #ffd970;
+    padding: 20px; text-align: center; z-index: 10;
+  }
+  #win-overlay.show { display: flex; }
+  #win-overlay h1 {
+    font-size: clamp(22px, 5vw, 42px);
+    letter-spacing: clamp(2px, 1vw, 6px);
+    margin-bottom: 14px;
+    text-shadow: 0 0 30px rgba(255, 200, 80, 0.6);
+  }
+  #win-overlay p { font-size: clamp(14px, 3vw, 20px); margin-bottom: 22px; color: #d4b870; }
+  #win-overlay button {
+    background: transparent; border: 2px solid #d4b870;
+    color: #ffd970; padding: 12px 30px;
+    font-family: inherit; font-size: clamp(13px, 3vw, 16px);
+    letter-spacing: 2px; cursor: pointer;
+    border-radius: 6px; transition: .2s; margin: 4px;
+  }
+  #win-overlay button:hover, #win-overlay button:active { background: #d4b870; color: #1a1008; }
+  #hint {
+    color: #8a7550;
+    font-size: clamp(10px, 2.2vw, 12px);
+    letter-spacing: 2px;
+    pointer-events: none; text-align: center; padding: 0 8px;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(5, 3, 2, 0.94);
+    display: none; justify-content: center; align-items: center;
+    z-index: 100; padding: 16px;
+    backdrop-filter: blur(6px);
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: linear-gradient(180deg, #1e130a 0%, #0f0904 100%);
+    border: 2px solid #6a4f1e;
+    border-radius: 18px;
+    padding: 26px 24px;
+    width: 100%; max-width: 420px;
+    max-height: 92vh; overflow-y: auto;
+    box-shadow: 0 0 60px rgba(200, 160, 60, 0.3), inset 0 1px 0 rgba(255,220,140,0.1);
+    color: #d4b870;
+  }
+  .modal h2 {
+    color: #ffd970;
+    font-size: clamp(20px, 4vw, 26px);
+    letter-spacing: 4px; text-align: center;
+    margin-bottom: 20px;
+    text-shadow: 0 0 20px rgba(255, 200, 80, 0.5);
+  }
+  .modal label {
+    display: block; font-size: 12px;
+    letter-spacing: 2px; margin-bottom: 6px;
+    color: #d4b870; text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .modal input {
+    width: 100%;
+    background: #0a0604;
+    border: 2px solid #4a3810;
+    color: #ffd970;
+    font-family: inherit; font-size: 15px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+    outline: none;
+    transition: border-color .15s;
+    letter-spacing: 1px;
+  }
+  .modal input:focus { border-color: #ffd970; }
+  .modal input.error { border-color: #e74c3c; }
+  .modal .err-msg {
+    color: #e74c3c;
+    font-size: 12px;
+    margin-top: -10px;
+    margin-bottom: 10px;
+    min-height: 16px;
+    letter-spacing: 1px;
+  }
+  .modal .btn {
+    display: block; width: 100%;
+    background: linear-gradient(180deg, #a8873a 0%, #6a4f1e 100%);
+    border: 2px solid #ffd970;
+    color: #1a1008;
+    padding: 12px;
+    font-family: inherit; font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 3px; cursor: pointer;
+    border-radius: 8px; margin-top: 8px;
+    transition: .2s;
+  }
+  .modal .btn:hover, .modal .btn:active {
+    background: linear-gradient(180deg, #ffd970 0%, #a8873a 100%);
+  }
+  .modal .btn.secondary {
+    background: transparent;
+    color: #d4b870;
+    border: 2px solid #6a4f1e;
+  }
+  .modal .btn.secondary:hover, .modal .btn.secondary:active {
+    background: #6a4f1e;
+    color: #ffd970;
+  }
+  .modal .btn:disabled {
+    opacity: 0.5; cursor: not-allowed;
+  }
+  .modal .switch-link {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 13px;
+    color: #d4b870;
+  }
+  .modal .switch-link span {
+    color: #ffd970;
+    cursor: pointer;
+    text-decoration: underline;
+    letter-spacing: 1px;
+  }
+  .modal .switch-link span:hover { color: #fff; }
+
+  #menu-overlay .modal { max-width: 480px; }
+  #menu-overlay .logo { text-align: center; margin-bottom: 24px; }
+  #menu-overlay .logo h1 {
+    font-size: clamp(28px, 7vw, 48px);
+    letter-spacing: clamp(3px, 1vw, 8px);
+    color: #ffd970;
+    text-shadow: 0 0 40px rgba(255, 200, 80, 0.6);
+    margin-bottom: 6px;
+  }
+  #menu-overlay .logo .sub {
+    font-size: clamp(11px, 2.4vw, 14px);
+    letter-spacing: 4px;
+    color: #8a7550;
+    text-transform: uppercase;
+  }
+  #menu-overlay .user-info {
+    text-align: center; font-size: 14px;
+    margin-bottom: 12px; color: #d4b870; letter-spacing: 1px;
+  }
+  #menu-overlay .user-info b { color: #ffd970; }
+  #menu-overlay .coins-line {
+    text-align: center; font-size: 15px;
+    margin-bottom: 20px; color: #d4b870; letter-spacing: 2px;
+  }
+  #menu-overlay .coins-line span { color: #ffd970; font-weight: bold; }
+
+  .lb-list {
+    max-height: 55vh; overflow-y: auto;
+    margin-bottom: 14px;
+  }
+  .lb-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px;
+    background: #0a0604;
+    border: 1px solid #2e1b0c;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    font-size: 14px;
+    color: #d4b870;
+    letter-spacing: 1px;
+  }
+  .lb-row.me {
+    border-color: #ffd970;
+    box-shadow: 0 0 12px rgba(255, 200, 80, 0.3);
+  }
+  .lb-row .place {
+    width: 40px; font-weight: bold; color: #ffd970;
+  }
+  .lb-row .place.gold { color: #ffd700; }
+  .lb-row .place.silver { color: #c0c0c0; }
+  .lb-row .place.bronze { color: #cd7f32; }
+  .lb-row .nick { flex: 1; padding-left: 8px; }
+  .lb-row .time { color: #80ffb0; font-weight: bold; }
+  .lb-empty {
+    text-align: center; color: #8a7550;
+    padding: 30px; font-size: 14px; letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+
+<div id="game">
+  <canvas id="c" width="720" height="480"></canvas>
+  <div id="hud">
+    <div id="timer">0.0s</div>
+    <div class="right">
+      <div id="progress">0 / 6</div>
+      <button class="hud-btn" id="menu-btn">МЕНЮ</button>
+      <button class="hud-btn" id="shop-btn">🛒 МАГАЗИН</button>
+    </div>
+  </div>
+  <div id="win-overlay">
+    <h1>ЗАМОК ВЗЛОМАН</h1>
+    <p id="win-info">Время: <span id="win-time">0.0s</span></p>
+    <div>
+      <button id="restart">ИГРАТЬ СНОВА</button>
+      <button id="win-menu">В МЕНЮ</button>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <button class="ctl" id="btn-left" aria-label="Влево">◀</button>
+  <button class="ctl up" id="btn-up" aria-label="Толкнуть">▲</button>
+  <button class="ctl" id="btn-right" aria-label="Вправо">▶</button>
+</div>
+
+<div id="hint">← → двигать · ↑ толкать · R заново</div>
+
+<!-- ГЛАВНОЕ МЕНЮ -->
+<div id="menu-overlay" class="modal-overlay">
+  <div class="modal">
+    <div class="logo">
+      <h1>LOCKPICK</h1>
+      <div class="sub">взлом замка</div>
+    </div>
+    <div class="user-info" id="menu-user"></div>
+    <div class="coins-line">Монет: <span id="menu-coins-val">0</span></div>
+    <button class="btn" id="menu-play">ИГРАТЬ</button>
+    <button class="btn secondary" id="menu-leaderboard">ЛИДЕРБОРД</button>
+    <button class="btn secondary" id="menu-logout">ВЫЙТИ ИЗ АККАУНТА</button>
+  </div>
+</div>
+
+<!-- ВХОД / РЕГИСТРАЦИЯ -->
+<div id="auth-overlay" class="modal-overlay">
+  <div class="modal">
+    <h2 id="auth-title">ВХОД</h2>
+
+    <label for="auth-nick">Ник</label>
+    <input id="auth-nick" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Введи ник">
+    <div class="err-msg" id="auth-nick-err"></div>
+
+    <label for="auth-pass">Пароль</label>
+    <input id="auth-pass" type="password" maxlength="32" autocomplete="off" placeholder="Введи пароль">
+    <div class="err-msg" id="auth-pass-err"></div>
+
+    <button class="btn" id="auth-submit">ВОЙТИ</button>
+    <div class="switch-link" id="auth-switch">
+      Нет аккаунта? <span id="auth-switch-btn">Зарегистрироваться</span>
+    </div>
+  </div>
+</div>
+
+<!-- МАГАЗИН -->
+<div id="shop-overlay" class="modal-overlay">
+  <div class="modal" style="max-width: 620px;">
+    <h2>МАГАЗИН ТЕМ</h2>
+    <div style="text-align:center; margin-bottom:14px; letter-spacing:2px;">
+      Монет: <span id="coins" style="color:#ffd970; font-weight:bold;">0</span>
+    </div>
+    <div id="themes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;"></div>
+    <button class="btn secondary" id="shop-close" style="margin-top:14px;">ЗАКРЫТЬ</button>
+  </div>
+</div>
+
+<!-- ЛИДЕРБОРД -->
+<div id="lb-overlay" class="modal-overlay">
+  <div class="modal">
+    <h2>ЛИДЕРБОРД</h2>
+    <div class="lb-list" id="lb-list"></div>
+    <button class="btn secondary" id="lb-close">ЗАКРЫТЬ</button>
+  </div>
+</div>
+
+<!-- ================= FIREBASE ================= -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, orderBy, limit, getDocs, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCYsP9XWK6FAZdT_GAg1VCsRKbCv-CUWRI",
+    authDomain: "lockpick-game-a364c.firebaseapp.com",
+    projectId: "lockpick-game-a364c",
+    storageBucket: "lockpick-game-a364c.firebasestorage.app",
+    messagingSenderId: "1017316748125",
+    appId: "1:1017316748125:web:3aa48f422120ef920a16b4",
+    measurementId: "G-YH4QLGHFEJ"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth  = getAuth(fbApp);
+  const db    = getFirestore(fbApp);
+
+  window.FB = {
+    auth, db,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    updateProfile,
+    doc, setDoc, getDoc, updateDoc,
+    collection, query, orderBy, limit, getDocs,
+    serverTimestamp,
+    ready: true
+  };
+  window.dispatchEvent(new Event('fb-ready'));
+</script>
+
+<!-- ================= ИГРА ================= -->
+<script>
+"use strict";
+
+// ==================== СОСТОЯНИЕ АККАУНТА ====================
+let currentUser = null;       // Firebase user
+let currentUserData = null;   // данные из Firestore
+let fbReady = false;
+
+function isLoggedIn() { return currentUser && currentUserData; }
+function getCoins()   { return isLoggedIn() ? (currentUserData.coins || 0) : 0; }
+function getOwned()   { return isLoggedIn() ? (currentUserData.owned || ['classic']) : ['classic']; }
+function getActiveThemeId() { return isLoggedIn() ? (currentUserData.active || 'classic') : 'classic'; }
+
+async function setCoins(v) {
+  if (!isLoggedIn()) return;
+  currentUserData.coins = v;
+  try {
+    await window.FB.updateDoc(window.FB.doc(window.FB.db, 'users', currentUser.uid), { coins: v });
+  } catch (e) { console.error(e); }
+  updateMenuText();
+}
+async function setOwned(arr) {
+  if (!isLoggedIn()) return;
+  currentUserData.owned = arr;
+  try {
+    await window.FB.updateDoc(window.FB.doc(window.FB.db, 'users', currentUser.uid), { owned: arr });
+  } catch (e) { console.error(e); }
+}
+async function setActiveTheme(id) {
+  if (!isLoggedIn()) return;
+  currentUserData.active = id;
+  try {
+    await window.FB.updateDoc(window.FB.doc(window.FB.db, 'users', currentUser.uid), { active: id });
+  } catch (e) { console.error(e); }
+}
+async function addRecord(timeSec) {
+  if (!isLoggedIn()) return;
+  const best = currentUserData.bestTime;
+  if (best === null || best === undefined || timeSec < best) {
+    currentUserData.bestTime = timeSec;
+    try {
+      await window.FB.updateDoc(window.FB.doc(window.FB.db, 'users', currentUser.uid), { bestTime: timeSec });
+    } catch (e) { console.error(e); }
+  }
+}
+
+// ==================== ТЕМЫ ====================
+const THEMES = [
+  { id: 'classic', name: 'Классика', price: 0,
+    bg1: '#241508', bg2: '#2e1b0c', bg3: '#362010',
+    plateGrad: ['#7a6028', '#c9a850', '#e0c070', '#c9a850', '#6b5020'],
+    plateBorder: '#3a2a10', plateInner: '#8a6a28',
+    rivet: ['#ffe8a0', '#a8873a', '#4a3810'], trackBg: '#0a0805',
+    pinGradSet: ['#b88a20', '#ffe8a0', '#fff5c8', '#ffe8a0', '#b88a20'],
+    pinGradOff: ['#5a4418', '#b89858', '#d4b470', '#b89858', '#5a4418'],
+    pinBorder: '#3a2a10', pinRing: 'rgba(60, 40, 15, 0.7)',
+    keyway1: '#0a0604', keyway2: '#1a1008', keywayEdge: '#5a4418',
+    pick1: '#1a1610', pick2: '#6a5a3a', pick3: '#b8a878',
+    pickBody1: '#3a3020', pickBody2: '#a89868', pickBody3: '#e8dca8',
+    pickTip: '#f0e4b8', tipBall: ['#fffbe0', '#c9b878', '#6a5a30'],
+    shear: 'rgba(255, 200, 80, 0.35)', glow: 'rgba(255, 240, 160, 0.5)',
+  },
+  { id: 'neon', name: 'Неон', price: 100,
+    bg1: '#0a0520', bg2: '#100830', bg3: '#1a0a45',
+    plateGrad: ['#1a0040', '#3a0070', '#6a00a0', '#3a0070', '#1a0040'],
+    plateBorder: '#ff00ff', plateInner: '#00ffff',
+    rivet: ['#ffffff', '#00ffff', '#ff00ff'], trackBg: '#050015',
+    pinGradSet: ['#00ffff', '#aaffff', '#ffffff', '#aaffff', '#00ffff'],
+    pinGradOff: ['#200040', '#6020a0', '#9040d0', '#6020a0', '#200040'],
+    pinBorder: '#ff00ff', pinRing: 'rgba(255, 0, 255, 0.6)',
+    keyway1: '#0a0020', keyway2: '#150040', keywayEdge: '#00ffff',
+    pick1: '#0a0020', pick2: '#404060', pick3: '#a0a0ff',
+    pickBody1: '#200060', pickBody2: '#8040ff', pickBody3: '#e0a0ff',
+    pickTip: '#00ffff', tipBall: ['#ffffff', '#00ffff', '#0080ff'],
+    shear: 'rgba(0, 255, 255, 0.5)', glow: 'rgba(0, 255, 255, 0.6)',
+  },
+  { id: 'emerald', name: 'Изумруд', price: 250,
+    bg1: '#051a10', bg2: '#0a2818', bg3: '#103a20',
+    plateGrad: ['#0a3a20', '#1a7a40', '#2ab060', '#1a7a40', '#0a3a20'],
+    plateBorder: '#051a10', plateInner: '#4ade80',
+    rivet: ['#ffffff', '#4ade80', '#0a3a20'], trackBg: '#02120a',
+    pinGradSet: ['#10b060', '#80ffb0', '#d0ffe0', '#80ffb0', '#10b060'],
+    pinGradOff: ['#0a2818', '#2a7040', '#4a9060', '#2a7040', '#0a2818'],
+    pinBorder: '#051a10', pinRing: 'rgba(10, 60, 30, 0.7)',
+    keyway1: '#02120a', keyway2: '#0a2818', keywayEdge: '#1a7a40',
+    pick1: '#051a10', pick2: '#2a6a40', pick3: '#80c0a0',
+    pickBody1: '#0a3a20', pickBody2: '#4aa060', pickBody3: '#c0ffd8',
+    pickTip: '#80ffb0', tipBall: ['#ffffff', '#4ade80', '#0a3a20'],
+    shear: 'rgba(80, 255, 160, 0.4)', glow: 'rgba(80, 255, 160, 0.55)',
+  },
+  { id: 'crimson', name: 'Багровый', price: 400,
+    bg1: '#1a0508', bg2: '#280810', bg3: '#3a0c18',
+    plateGrad: ['#3a0808', '#800810', '#b01820', '#800810', '#3a0808'],
+    plateBorder: '#1a0508', plateInner: '#ff4060',
+    rivet: ['#ffffff', '#ff6070', '#3a0808'], trackBg: '#100204',
+    pinGradSet: ['#a00810', '#ff5060', '#ffc0c8', '#ff5060', '#a00810'],
+    pinGradOff: ['#280810', '#701820', '#a03040', '#701820', '#280810'],
+    pinBorder: '#1a0508', pinRing: 'rgba(80, 10, 20, 0.7)',
+    keyway1: '#100204', keyway2: '#280810', keywayEdge: '#800810',
+    pick1: '#1a0508', pick2: '#6a1820', pick3: '#c08080',
+    pickBody1: '#3a0808', pickBody2: '#a03040', pickBody3: '#ffc0c8',
+    pickTip: '#ff8090', tipBall: ['#ffffff', '#ff4060', '#800810'],
+    shear: 'rgba(255, 80, 100, 0.45)', glow: 'rgba(255, 80, 100, 0.6)',
+  },
+  { id: 'ice', name: 'Лёд', price: 600,
+    bg1: '#0a1420', bg2: '#102030', bg3: '#183040',
+    plateGrad: ['#0a2030', '#205080', '#40a0d0', '#205080', '#0a2030'],
+    plateBorder: '#0a1420', plateInner: '#a0e0ff',
+    rivet: ['#ffffff', '#a0e0ff', '#0a2030'], trackBg: '#050a12',
+    pinGradSet: ['#40a0d0', '#a0e0ff', '#e8f8ff', '#a0e0ff', '#40a0d0'],
+    pinGradOff: ['#102030', '#305070', '#5080a0', '#305070', '#102030'],
+    pinBorder: '#0a1420', pinRing: 'rgba(20, 50, 80, 0.7)',
+    keyway1: '#050a12', keyway2: '#102030', keywayEdge: '#205080',
+    pick1: '#0a1420', pick2: '#3a5a78', pick3: '#a0c0d8',
+    pickBody1: '#0a2030', pickBody2: '#5080a0', pickBody3: '#c0e8ff',
+    pickTip: '#a0e0ff', tipBall: ['#ffffff', '#a0e0ff', '#205080'],
+    shear: 'rgba(160, 224, 255, 0.4)', glow: 'rgba(160, 224, 255, 0.55)',
+  },
+];
+
+let currentTheme = THEMES[0];
+function refreshTheme() {
+  const id = getActiveThemeId();
+  const t = THEMES.find(x => x.id === id);
+  const owned = getOwned();
+  if (t && owned.indexOf(t.id) !== -1) currentTheme = t;
+  else currentTheme = THEMES[0];
+}
+
+// ==================== ИГРА — CONST ====================
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const CX = W / 2, CY = H / 2;
+
+const PIN_COUNT = 6;
+const PIN_SPACING = 62;
+const PIN_START_X = CX - (PIN_COUNT - 1) * PIN_SPACING / 2;
+const PIN_TRACK_TOP = 150;
+const PIN_TRACK_BOTTOM = 320;
+const PIN_LENGTH = 62;
+const PIN_WIDTH = 24;
+const MAX_LIFT = 90;
+const PUSH_AMOUNT = 35;
+const DECAY_PER_SEC = 30;
+const PICK_Y = 380;
+const PICK_TIP_UP = 60;
+
+let pins = [];
+let bindOrder = [];
+let bindProgress = 0;
+let pickIdx = 0;
+let pickX = 0;
+let pushAnim = 0;
+let wrongFlash = 0;
+let successFlash = 0;
+let dropFlash = 0;
+let won = false;
+let startTime = 0;
+let lastFrame = 0;
+let totalTime = 0;
+
+// ==================== ЗВУК ====================
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+function playTone(freq, dur, vol, type = 'sine', freqEnd = null) {
+  if (!audioCtx) return;
+  try {
+    const t = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  } catch (e) {}
+}
+function soundPush() { playTone(420, 0.07, 0.06, 'triangle'); }
+function soundWrong() { playTone(110, 0.18, 0.1, 'sawtooth', 70); }
+function soundSet() { playTone(880, 0.08, 0.11, 'sine'); setTimeout(() => playTone(1250, 0.14, 0.09, 'sine'), 45); }
+function soundDrop() { playTone(180, 0.5, 0.12, 'sawtooth', 60); setTimeout(() => playTone(120, 0.6, 0.09, 'sawtooth', 40), 80); }
+function soundWin() { [523, 659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => playTone(f, 0.35, 0.11, 'sine'), i * 110)); }
+function soundCoin() { playTone(1200, 0.1, 0.08, 'square'); setTimeout(() => playTone(1600, 0.15, 0.06, 'square'), 60); }
+
+// ==================== ИГРА — ЛОГИКА ====================
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function initGame() {
+  refreshTheme();
+  bindOrder = shuffle([0, 1, 2, 3, 4, 5]);
+  bindProgress = 0;
+  pins = [];
+  for (let i = 0; i < PIN_COUNT; i++) {
+    pins.push({ x: PIN_START_X + i * PIN_SPACING, height: 0, set: false, shakeOff: 0, dropAnim: 0 });
+  }
+  pickIdx = 0; pickX = pins[0].x;
+  pushAnim = 0; wrongFlash = 0; successFlash = 0; dropFlash = 0;
+  won = false; totalTime = 0;
+  startTime = performance.now();
+  lastFrame = startTime;
+  updateHud();
+  document.getElementById('win-overlay').classList.remove('show');
+}
+function updateHud() {
+  document.getElementById('progress').textContent = bindProgress + ' / ' + PIN_COUNT;
+  document.getElementById('coins').textContent = getCoins();
+  document.getElementById('menu-coins-val').textContent = getCoins();
+}
+
+function movePick(dir) {
+  if (won) return;
+  const next = pickIdx + dir;
+  if (next < 0 || next >= PIN_COUNT) return;
+  pickIdx = next;
+  playTone(220 + dir * 20, 0.03, 0.03, 'square');
+}
+function dropAllSetPins() {
+  let dropped = 0;
+  for (const p of pins) {
+    if (p.set) { p.set = false; p.dropAnim = 1; dropped++; }
+  }
+  if (bindProgress > 0) { bindProgress = 0; updateHud(); }
+  return dropped;
+}
+function tryPush() {
+  if (won) return;
+  const p = pins[pickIdx];
+  if (p.set) { soundWrong(); wrongFlash = 0.7; return; }
+  const isActive = (bindOrder[bindProgress] === pickIdx);
+  if (isActive) {
+    p.height = Math.min(100, p.height + PUSH_AMOUNT);
+    pushAnim = 1;
+    if (p.height >= 100) {
+      p.set = true; p.height = 100;
+      bindProgress++; successFlash = 1; soundSet(); updateHud();
+      if (bindProgress >= PIN_COUNT) {
+        won = true;
+        totalTime = (performance.now() - startTime) / 1000;
+        const reward = 25 + Math.max(0, Math.floor(60 - totalTime));
+        setCoins(getCoins() + reward);
+        addRecord(totalTime);
+        soundWin();
+        updateHud();
+        setTimeout(() => {
+          document.getElementById('win-info').innerHTML =
+            'Время: <span style="color:#80ffb0">' + totalTime.toFixed(2) + 's</span>' +
+            '<br><br>Награда: <span style="color:#4ade80">+' + reward + '</span> монет';
+          document.getElementById('win-overlay').classList.add('show');
+        }, 600);
+      }
+    } else soundPush();
+  } else {
+    p.shakeOff = 1; wrongFlash = 0.9; pushAnim = 1;
+    const dropped = dropAllSetPins();
+    if (dropped > 0) { dropFlash = 1; soundDrop(); } else soundWrong();
+  }
+}
+
+function update(dt) {
+  if (!pins.length) return;
+  const targetX = pins[pickIdx].x;
+  pickX += (targetX - pickX) * Math.min(1, dt * 14);
+  for (const p of pins) {
+    if (!p.set && p.height > 0) p.height = Math.max(0, p.height - DECAY_PER_SEC * dt);
+    if (p.shakeOff > 0) p.shakeOff *= Math.pow(0.001, dt);
+    if (p.dropAnim > 0) p.dropAnim = Math.max(0, p.dropAnim - dt * 3);
+  }
+  pushAnim *= Math.pow(0.0001, dt);
+  wrongFlash *= Math.pow(0.002, dt);
+  successFlash *= Math.pow(0.005, dt);
+  dropFlash *= Math.pow(0.005, dt);
+  if (!won && !menuOverlay.classList.contains('show')) {
+    totalTime = (performance.now() - startTime) / 1000;
+    document.getElementById('timer').textContent = totalTime.toFixed(1) + 's';
+  }
+}
+
+// ==================== ОТРИСОВКА ====================
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function draw() {
+  const T = currentTheme;
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bgGrad.addColorStop(0, T.bg1);
+  bgGrad.addColorStop(0.5, T.bg2);
+  bgGrad.addColorStop(1, T.bg1);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < W; i += 56) {
+    const g = ctx.createLinearGradient(i, 0, i + 56, 0);
+    g.addColorStop(0, T.bg1); g.addColorStop(0.4, T.bg2);
+    g.addColorStop(0.5, T.bg3); g.addColorStop(0.6, T.bg2);
+    g.addColorStop(1, T.bg1);
+    ctx.fillStyle = g;
+    ctx.fillRect(i, 0, 56, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(i, 0, 2, H);
+  }
+  const vig = ctx.createRadialGradient(CX, CY, 200, CX, CY, 520);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.8)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  drawLockPlate();
+  drawPins();
+  drawKeyway();
+  drawPick();
+  drawTensionWrench();
+
+  if (wrongFlash > 0.02) { ctx.fillStyle = 'rgba(200, 40, 40, ' + (wrongFlash * 0.25) + ')'; ctx.fillRect(0, 0, W, H); }
+  if (successFlash > 0.02) { ctx.fillStyle = 'rgba(255, 220, 100, ' + (successFlash * 0.2) + ')'; ctx.fillRect(0, 0, W, H); }
+  if (dropFlash > 0.02) { ctx.fillStyle = 'rgba(120, 30, 30, ' + (dropFlash * 0.35) + ')'; ctx.fillRect(0, 0, W, H); }
+}
+function drawLockPlate() {
+  const T = currentTheme;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 30; ctx.shadowOffsetY = 8;
+  const plateGrad = ctx.createLinearGradient(0, 100, 0, 420);
+  plateGrad.addColorStop(0, T.plateGrad[0]);
+  plateGrad.addColorStop(0.35, T.plateGrad[1]);
+  plateGrad.addColorStop(0.5, T.plateGrad[2]);
+  plateGrad.addColorStop(0.65, T.plateGrad[3]);
+  plateGrad.addColorStop(1, T.plateGrad[4]);
+  ctx.fillStyle = plateGrad;
+  const L = 200, R = 520, Tp = 100, B = 440, r = 18;
+  ctx.beginPath();
+  ctx.moveTo(L + r, Tp); ctx.lineTo(R - r, Tp);
+  ctx.quadraticCurveTo(R, Tp, R, Tp + r); ctx.lineTo(R, B - r);
+  ctx.quadraticCurveTo(R, B, R - r, B); ctx.lineTo(L + r, B);
+  ctx.quadraticCurveTo(L, B, L, B - r); ctx.lineTo(L, Tp + r);
+  ctx.quadraticCurveTo(L, Tp, L + r, Tp);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = T.plateBorder; ctx.lineWidth = 4; ctx.stroke();
+  ctx.strokeStyle = T.plateInner; ctx.lineWidth = 2;
+  roundRect(L + 14, Tp + 14, R - L - 28, B - Tp - 28, 12);
+  ctx.stroke();
+  const rivets = [[L + 26, Tp + 26], [R - 26, Tp + 26], [L + 26, B - 26], [R - 26, B - 26]];
+  for (const [rx, ry] of rivets) {
+    const rg = ctx.createRadialGradient(rx - 2, ry - 2, 1, rx, ry, 8);
+    rg.addColorStop(0, T.rivet[0]);
+    rg.addColorStop(0.6, T.rivet[1]);
+    rg.addColorStop(1, T.rivet[2]);
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(rx, ry, 7, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawPins() {
+  const T = currentTheme;
+  for (let i = 0; i < PIN_COUNT; i++) {
+    const p = pins[i];
+    const shakeX = p.shakeOff > 0 ? Math.sin(performance.now() * 0.06) * p.shakeOff * 4 : 0;
+    const x = p.x + shakeX;
+    ctx.fillStyle = T.trackBg;
+    ctx.fillRect(x - PIN_WIDTH / 2 - 3, PIN_TRACK_TOP - 6, PIN_WIDTH + 6, PIN_TRACK_BOTTOM - PIN_TRACK_TOP + 12);
+    if (i === pickIdx && !won) {
+      ctx.fillStyle = 'rgba(255, 240, 180, 0.08)';
+      ctx.fillRect(x - PIN_WIDTH / 2 - 3, PIN_TRACK_TOP - 6, PIN_WIDTH + 6, PIN_TRACK_BOTTOM - PIN_TRACK_TOP + 12);
+    }
+    let effectiveHeight = p.height;
+    if (p.dropAnim > 0) effectiveHeight = p.height * (1 - p.dropAnim) + 100 * p.dropAnim * p.dropAnim;
+    const lift = effectiveHeight / 100 * MAX_LIFT;
+    const pinBottom = PIN_TRACK_BOTTOM - lift;
+    const pinTop = pinBottom - PIN_LENGTH;
+    const pinGrad = ctx.createLinearGradient(x - PIN_WIDTH / 2, 0, x + PIN_WIDTH / 2, 0);
+    const arr = p.set ? T.pinGradSet : T.pinGradOff;
+    pinGrad.addColorStop(0, arr[0]); pinGrad.addColorStop(0.3, arr[1]);
+    pinGrad.addColorStop(0.5, arr[2]); pinGrad.addColorStop(0.7, arr[3]);
+    pinGrad.addColorStop(1, arr[4]);
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 6;
+    ctx.fillStyle = pinGrad;
+    roundRect(x - PIN_WIDTH / 2, pinTop, PIN_WIDTH, PIN_LENGTH, 4);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = T.pinBorder; ctx.lineWidth = 1.5;
+    roundRect(x - PIN_WIDTH / 2, pinTop, PIN_WIDTH, PIN_LENGTH, 4);
+    ctx.stroke();
+    ctx.strokeStyle = T.pinRing; ctx.lineWidth = 1;
+    for (let k = 1; k < 5; k++) {
+      const yy = pinTop + k * PIN_LENGTH / 5;
+      ctx.beginPath();
+      ctx.moveTo(x - PIN_WIDTH / 2 + 2, yy);
+      ctx.lineTo(x + PIN_WIDTH / 2 - 2, yy);
+      ctx.stroke();
+    }
+    if (p.set) {
+      const glow = ctx.createRadialGradient(x, pinTop + PIN_LENGTH / 2, 4, x, pinTop + PIN_LENGTH / 2, 40);
+      glow.addColorStop(0, T.glow);
+      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x, pinTop + PIN_LENGTH / 2, 40, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (p.dropAnim > 0) {
+      ctx.fillStyle = 'rgba(255, 60, 60, ' + (p.dropAnim * 0.4) + ')';
+      roundRect(x - PIN_WIDTH / 2, pinTop, PIN_WIDTH, PIN_LENGTH, 4);
+      ctx.fill();
+    }
+    ctx.strokeStyle = T.shear; ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x - PIN_WIDTH / 2 - 8, PIN_TRACK_TOP + 5);
+    ctx.lineTo(x + PIN_WIDTH / 2 + 8, PIN_TRACK_TOP + 5);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+function drawKeyway() {
+  const T = currentTheme;
+  const y = PICK_Y + 4;
+  const x1 = 140, x2 = 580;
+  const g = ctx.createLinearGradient(0, y - 6, 0, y + 10);
+  g.addColorStop(0, T.keyway1); g.addColorStop(0.5, T.keyway2); g.addColorStop(1, T.keyway1);
+  ctx.fillStyle = g;
+  ctx.fillRect(x1, y - 6, x2 - x1, 16);
+  ctx.strokeStyle = T.keywayEdge; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x1, y - 6); ctx.lineTo(x2, y - 6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x1, y + 10); ctx.lineTo(x2, y + 10); ctx.stroke();
+}
+function drawPick() {
+  const T = currentTheme;
+  const tipRise = pushAnim * PICK_TIP_UP;
+  const x = pickX;
+  const y = PICK_Y;
+  const handleGrad = ctx.createLinearGradient(0, y - 3, 0, y + 3);
+  handleGrad.addColorStop(0, T.pick1); handleGrad.addColorStop(0.35, T.pick2);
+  handleGrad.addColorStop(0.5, T.pick3); handleGrad.addColorStop(0.65, T.pick2);
+  handleGrad.addColorStop(1, T.pick1);
+  ctx.strokeStyle = handleGrad; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(30, y); ctx.lineTo(x - 55, y);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(30, y - 1.5); ctx.lineTo(x - 55, y - 1.5);
+  ctx.stroke();
+  const bodyGrad = ctx.createLinearGradient(0, y - 3, 0, y + 3);
+  bodyGrad.addColorStop(0, T.pickBody1); bodyGrad.addColorStop(0.35, T.pickBody2);
+  bodyGrad.addColorStop(0.5, T.pickBody3); bodyGrad.addColorStop(0.65, T.pickBody2);
+  bodyGrad.addColorStop(1, T.pickBody1);
+  ctx.strokeStyle = bodyGrad; ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 55, y);
+  ctx.quadraticCurveTo(x - 25, y - 4, x - 5, y - 2);
+  ctx.quadraticCurveTo(x + 4, y - 1, x + 8, y - tipRise * 0.4);
+  ctx.stroke();
+  const tipX = x + 6;
+  const tipY = y - tipRise;
+  ctx.strokeStyle = T.pickTip; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + 8, y - tipRise * 0.4);
+  ctx.quadraticCurveTo(x + 16, y - tipRise * 0.75, x + 10, y - tipRise);
+  ctx.stroke();
+  const ballGrad = ctx.createRadialGradient(tipX - 1, tipY - 1, 0.5, tipX, tipY, 4);
+  ballGrad.addColorStop(0, T.tipBall[0]);
+  ballGrad.addColorStop(0.6, T.tipBall[1]);
+  ballGrad.addColorStop(1, T.tipBall[2]);
+  ctx.fillStyle = ballGrad;
+  ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(60, 50, 20, 0.6)'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.arc(tipX, tipY, 3, 0, Math.PI * 2); ctx.stroke();
+  if (pushAnim > 0.1) {
+    ctx.save();
+    ctx.globalAlpha = pushAnim * 0.55;
+    const glow = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, 22);
+    glow.addColorStop(0, T.glow);
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(tipX, tipY, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 50, y - 1);
+  ctx.quadraticCurveTo(x - 25, y - 5, x - 5, y - 3);
+  ctx.stroke();
+}
+function drawTensionWrench() {
+  const T = currentTheme;
+  const angle = (bindProgress / PIN_COUNT) * 0.35;
+  ctx.save();
+  ctx.translate(600, PICK_Y);
+  ctx.rotate(angle);
+  ctx.fillStyle = T.pickBody1;
+  ctx.fillRect(0, -6, 20, 12);
+  const g = ctx.createLinearGradient(0, -4, 0, 4);
+  g.addColorStop(0, T.pick2); g.addColorStop(0.5, T.pick3); g.addColorStop(1, T.pick2);
+  ctx.fillStyle = g;
+  ctx.fillRect(15, -3, 80, 6);
+  ctx.fillStyle = T.pickBody2;
+  ctx.fillRect(90, -10, 8, 20);
+  ctx.restore();
+}
+
+// ==================== ЦИКЛ ====================
+function loop(now) {
+  try {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    draw();
+  } catch (e) { console.error('loop error', e); }
+  requestAnimationFrame(loop);
+}
+
+// ==================== UI ====================
+const menuOverlay = document.getElementById('menu-overlay');
+const authOverlay = document.getElementById('auth-overlay');
+const shopOverlay = document.getElementById('shop-overlay');
+const lbOverlay   = document.getElementById('lb-overlay');
+
+const authTitle   = document.getElementById('auth-title');
+const authNick    = document.getElementById('auth-nick');
+const authPass    = document.getElementById('auth-pass');
+const authNickErr = document.getElementById('auth-nick-err');
+const authPassErr = document.getElementById('auth-pass-err');
+const authSubmit  = document.getElementById('auth-submit');
+
+let authMode = 'login';
+
+function setAuthMode(mode) {
+  authMode = mode;
+  if (mode === 'login') {
+    authTitle.textContent = 'ВХОД';
+    authSubmit.textContent = 'ВОЙТИ';
+    document.getElementById('auth-switch').innerHTML =
+      'Нет аккаунта? <span id="auth-switch-btn">Зарегистрироваться</span>';
+  } else {
+    authTitle.textContent = 'РЕГИСТРАЦИЯ';
+    authSubmit.textContent = 'СОЗДАТЬ АККАУНТ';
+    document.getElementById('auth-switch').innerHTML =
+      'Уже есть аккаунт? <span id="auth-switch-btn">Войти</span>';
+  }
+  document.getElementById('auth-switch-btn').addEventListener('click', () => {
+    setAuthMode(authMode === 'login' ? 'register' : 'login');
+  });
+  clearAuthErrors();
+}
+function clearAuthErrors() {
+  authNickErr.textContent = '';
+  authPassErr.textContent = '';
+  authNick.classList.remove('error');
+  authPass.classList.remove('error');
+}
+function showAuthError(field, msg) {
+  if (field === 'nick') { authNickErr.textContent = msg; authNick.classList.add('error'); }
+  else { authPassErr.textContent = msg; authPass.classList.add('error'); }
+}
+function validateNick(nick) {
+  if (!nick) return 'Введи ник';
+  if (nick.length < 3) return 'Ник минимум 3 символа';
+  if (nick.length > 16) return 'Ник максимум 16 символов';
+  if (!/^[a-zA-Z0-9_]+$/.test(nick)) return 'Только латиница, цифры и _';
+  return null;
+}
+function validatePass(pass) {
+  if (!pass) return 'Введи пароль';
+  if (pass.length < 6) return 'Пароль минимум 6 символов';
+  if (pass.length > 32) return 'Пароль максимум 32 символа';
+  return null;
+}
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function showMenu() {
+  menuOverlay.classList.add('show');
+  authOverlay.classList.remove('show');
+  shopOverlay.classList.remove('show');
+  lbOverlay.classList.remove('show');
+  updateMenuText();
+}
+function hideMenu() { menuOverlay.classList.remove('show'); }
+function showAuth() {
+  menuOverlay.classList.remove('show');
+  authOverlay.classList.add('show');
+  setAuthMode('login');
+  authNick.value = '';
+  authPass.value = '';
+  clearAuthErrors();
+}
+function updateMenuText() {
+  if (!isLoggedIn()) {
+    document.getElementById('menu-user').innerHTML = '<b>Гость</b>';
+  } else {
+    document.getElementById('menu-user').innerHTML =
+      'Игрок: <b>' + escapeHtml(currentUserData.nick) + '</b>';
+  }
+  document.getElementById('menu-coins-val').textContent = getCoins();
+  document.getElementById('coins').textContent = getCoins();
+}
+
+// ==================== РЕГИСТРАЦИЯ / ВХОД ====================
+async function tryRegister() {
+  clearAuthErrors();
+  const nick = authNick.value.trim();
+  const pass = authPass.value;
+
+  const nickErr = validateNick(nick);
+  if (nickErr) return showAuthError('nick', nickErr);
+  const passErr = validatePass(pass);
+  if (passErr) return showAuthError('pass', passErr);
+
+  authSubmit.disabled = true;
+  authSubmit.textContent = 'СОЗДАНИЕ...';
+
+  try {
+    // 1. Проверка уникальности ника
+    const nickDoc = await window.FB.getDoc(window.FB.doc(window.FB.db, 'nicknames', nick.toLowerCase()));
+    if (nickDoc.exists()) {
+      showAuthError('nick', 'Такой игрок уже существует');
+      return;
+    }
+
+    // 2. Создание аккаунта Firebase
+    const email = nick.toLowerCase() + '@lockpick.local';
+    const cred = await window.FB.createUserWithEmailAndPassword(window.FB.auth, email, pass);
+    await window.FB.updateProfile(cred.user, { displayName: nick });
+
+    // 3. Резервируем ник
+    try {
+      await window.FB.setDoc(window.FB.doc(window.FB.db, 'nicknames', nick.toLowerCase()), {
+        uid: cred.user.uid, nick: nick
+      });
+    } catch (e) { console.error('nick reserve error', e); }
+
+    // 4. Создаём профиль
+    await window.FB.setDoc(window.FB.doc(window.FB.db, 'users', cred.user.uid), {
+      nick: nick,
+      coins: 0,
+      owned: ['classic'],
+      active: 'classic',
+      bestTime: null,
+      createdAt: window.FB.serverTimestamp(),
+    });
+  } catch (e) {
+    console.error(e);
+    if (e.code === 'auth/email-already-in-use') showAuthError('nick', 'Такой игрок уже существует');
+    else if (e.code === 'auth/weak-password') showAuthError('pass', 'Пароль слишком простой');
+    else showAuthError('nick', 'Ошибка регистрации. Попробуй ещё раз.');
+  } finally {
+    authSubmit.disabled = false;
+    authSubmit.textContent = authMode === 'register' ? 'СОЗДАТЬ АККАУНТ' : 'ВОЙТИ';
+  }
+}
+
+async function tryLogin() {
+  clearAuthErrors();
+  const nick = authNick.value.trim();
+  const pass = authPass.value;
+
+  const nickErr = validateNick(nick);
+  if (nickErr) return showAuthError('nick', nickErr);
+  if (!pass) return showAuthError('pass', 'Введи пароль');
+
+  authSubmit.disabled = true;
+  authSubmit.textContent = 'ВХОД...';
+
+  try {
+    const email = nick.toLowerCase() + '@lockpick.local';
+    await window.FB.signInWithEmailAndPassword(window.FB.auth, email, pass);
+  } catch (e) {
+    console.error(e);
+    if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
+      showAuthError('nick', 'Неверный ник или пароль');
+    } else if (e.code === 'auth/wrong-password') {
+      showAuthError('pass', 'Неверный пароль');
+    } else {
+      showAuthError('nick', 'Ошибка входа. Попробуй ещё раз.');
+    }
+  } finally {
+    authSubmit.disabled = false;
+    authSubmit.textContent = authMode === 'register' ? 'СОЗДАТЬ АККАУНТ' : 'ВОЙТИ';
+  }
+}
+
+authSubmit.addEventListener('click', () => {
+  ensureAudio();
+  if (authMode === 'register') tryRegister();
+  else tryLogin();
+});
+authNick.addEventListener('input', clearAuthErrors);
+authPass.addEventListener('input', clearAuthErrors);
+authNick.addEventListener('keydown', (e) => { if (e.key === 'Enter') authPass.focus(); });
+authPass.addEventListener('keydown', (e) => { if (e.key === 'Enter') authSubmit.click(); });
+
+// ==================== КНОПКИ МЕНЮ ====================
+document.getElementById('menu-play').addEventListener('click', () => {
+  ensureAudio();
+  if (!isLoggedIn()) { showAuth(); return; }
+  hideMenu();
+  initGame();
+});
+document.getElementById('menu-leaderboard').addEventListener('click', () => {
+  ensureAudio();
+  renderLeaderboard();
+  lbOverlay.classList.add('show');
+});
+document.getElementById('menu-logout').addEventListener('click', async () => {
+  ensureAudio();
+  try { await window.FB.signOut(window.FB.auth); } catch (e) {}
+});
+document.getElementById('menu-btn').addEventListener('click', () => {
+  ensureAudio();
+  if (won) return;
+  showMenu();
+});
+document.getElementById('win-menu').addEventListener('click', () => showMenu());
+document.getElementById('lb-close').addEventListener('click', () => lbOverlay.classList.remove('show'));
+lbOverlay.addEventListener('click', (e) => { if (e.target === lbOverlay) lbOverlay.classList.remove('show'); });
+
+// ==================== ЛИДЕРБОРД ====================
+async function renderLeaderboard() {
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '<div class="lb-empty">Загрузка…</div>';
+  try {
+    const q = window.FB.query(
+      window.FB.collection(window.FB.db, 'users'),
+      window.FB.orderBy('bestTime', 'asc'),
+      window.FB.limit(50)
+    );
+    const snap = await window.FB.getDocs(q);
+    const entries = [];
+    snap.forEach(d => {
+      const data = d.data();
+      if (data.bestTime !== null && data.bestTime !== undefined && data.nick) {
+        entries.push({ nick: data.nick, best: data.bestTime, uid: d.id });
+      }
+    });
+    if (entries.length === 0) {
+      list.innerHTML = '<div class="lb-empty">Пока никто не взломал замок.<br>Будь первым!</div>';
+      return;
+    }
+    list.innerHTML = '';
+    entries.forEach((e, i) => {
+      const row = document.createElement('div');
+      row.className = 'lb-row' + (currentUser && e.uid === currentUser.uid ? ' me' : '');
+      let placeClass = '';
+      if (i === 0) placeClass = 'gold';
+      else if (i === 1) placeClass = 'silver';
+      else if (i === 2) placeClass = 'bronze';
+      row.innerHTML =
+        '<div class="place ' + placeClass + '">#' + (i + 1) + '</div>' +
+        '<div class="nick">' + escapeHtml(e.nick) + '</div>' +
+        '<div class="time">' + e.best.toFixed(2) + 's</div>';
+      list.appendChild(row);
+    });
+  } catch (e) {
+    console.error(e);
+    list.innerHTML = '<div class="lb-empty">Ошибка загрузки лидерборда</div>';
+  }
+}
+
+// ==================== МАГАЗИН ====================
+const themesEl = document.getElementById('themes');
+function renderShop() {
+  document.getElementById('coins').textContent = getCoins();
+  themesEl.innerHTML = '';
+  const owned = getOwned();
+  const active = getActiveThemeId();
+  for (const t of THEMES) {
+    const isOwned = owned.indexOf(t.id) !== -1;
+    const isActive = active === t.id;
+    const card = document.createElement('div');
+    card.style.cssText = 'background:linear-gradient(180deg,#2e1b0c,#1a1008);border:2px solid ' +
+      (isActive ? '#ffd970' : (isOwned ? '#4a6a3a' : '#4a3810')) +
+      ';border-radius:12px;padding:12px;cursor:pointer;text-align:center;color:#d4b870;transition:.15s;' +
+      (isActive ? 'box-shadow:0 0 20px rgba(255,200,80,0.4);' : '');
+    const prev = document.createElement('div');
+    prev.style.cssText = 'width:100%;height:70px;border-radius:8px;margin-bottom:8px;position:relative;overflow:hidden;border:1px solid rgba(0,0,0,0.5);background:linear-gradient(180deg,' + t.bg1 + ',' + t.bg2 + ')';
+    const pinDot = document.createElement('div');
+    pinDot.style.cssText = 'position:absolute;width:8px;height:28px;border-radius:3px;left:50%;top:50%;transform:translate(-50%,-50%);background:linear-gradient(90deg,' + t.pinGradOff[0] + ',' + t.pinGradOff[2] + ',' + t.pinGradOff[4] + ')';
+    const pickLine = document.createElement('div');
+    pickLine.style.cssText = 'position:absolute;height:3px;left:10%;right:10%;top:78%;border-radius:2px;background:linear-gradient(90deg,' + t.pick2 + ',' + t.pick3 + ',' + t.pick2 + ')';
+    prev.appendChild(pinDot); prev.appendChild(pickLine);
+    card.appendChild(prev);
+    const name = document.createElement('div');
+    name.style.cssText = 'font-size:13px;letter-spacing:2px;color:#ffd970;margin-bottom:4px;';
+    name.textContent = t.name;
+    card.appendChild(name);
+    const price = document.createElement('div');
+    price.style.cssText = 'font-size:12px;color:#d4b870;opacity:0.85;';
+    if (isActive) price.textContent = '✓ Выбрана';
+    else if (isOwned) price.textContent = 'Нажми, чтобы применить';
+    else price.textContent = t.price + ' 🪙';
+    card.appendChild(price);
+
+    card.addEventListener('click', async () => {
+      ensureAudio();
+      if (!isLoggedIn()) { showAuth(); return; }
+      if (isOwned) {
+        if (getActiveThemeId() === t.id) return;
+        await setActiveTheme(t.id);
+        refreshTheme();
+        soundSet();
+        renderShop();
+      } else {
+        if (getCoins() >= t.price) {
+          await setCoins(getCoins() - t.price);
+          const ow = getOwned(); ow.push(t.id); await setOwned(ow);
+          await setActiveTheme(t.id);
+          refreshTheme();
+          soundCoin();
+          updateHud();
+          renderShop();
+        } else {
+          soundWrong();
+        }
+      }
+    });
+    themesEl.appendChild(card);
+  }
+}
+document.getElementById('shop-btn').addEventListener('click', () => {
+  ensureAudio();
+  if (!isLoggedIn()) { showAuth(); return; }
+  renderShop();
+  shopOverlay.classList.add('show');
+});
+document.getElementById('shop-close').addEventListener('click', () => shopOverlay.classList.remove('show'));
+shopOverlay.addEventListener('click', (e) => { if (e.target === shopOverlay) shopOverlay.classList.remove('show'); });
+
+// ==================== УПРАВЛЕНИЕ ====================
+document.addEventListener('keydown', (e) => {
+  if (menuOverlay.classList.contains('show')) return;
+  if (authOverlay.classList.contains('show')) return;
+  if (shopOverlay.classList.contains('show')) return;
+  if (lbOverlay.classList.contains('show')) return;
+  if (won) return;
+  ensureAudio();
+  switch (e.code) {
+    case 'ArrowLeft': case 'KeyA': e.preventDefault(); movePick(-1); break;
+    case 'ArrowRight': case 'KeyD': e.preventDefault(); movePick(1); break;
+    case 'ArrowUp': case 'KeyW': e.preventDefault(); if (!e.repeat) tryPush(); break;
+    case 'KeyR': e.preventDefault(); initGame(); break;
+  }
+});
+
+function bindButton(id, action) {
+  const btn = document.getElementById(id);
+  let pressed = false;
+  const press = (e) => {
+    e.preventDefault(); ensureAudio();
+    if (pressed) return; pressed = true;
+    btn.classList.add('pressed'); action();
+  };
+  const release = (e) => {
+    if (e) e.preventDefault();
+    pressed = false; btn.classList.remove('pressed');
+  };
+  btn.addEventListener('touchstart', press, { passive: false });
+  btn.addEventListener('touchend', release);
+  btn.addEventListener('touchcancel', release);
+  btn.addEventListener('mousedown', press);
+  btn.addEventListener('mouseup', release);
+  btn.addEventListener('mouseleave', release);
+  btn.addEventListener('click', (e) => e.preventDefault());
+}
+bindButton('btn-left',  () => movePick(-1));
+bindButton('btn-right', () => movePick(1));
+bindButton('btn-up',    () => tryPush());
+
+document.getElementById('restart').addEventListener('click', () => { ensureAudio(); initGame(); });
+canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+canvas.addEventListener('touchmove',  (e) => e.preventDefault(), { passive: false });
+
+// ==================== FIREBASE — СЕССИЯ ====================
+function fbInit() {
+  window.FB.onAuthStateChanged(window.FB.auth, async (user) => {
+    if (user) {
+      try {
+        const ref = window.FB.doc(window.FB.db, 'users', user.uid);
+        const snap = await window.FB.getDoc(ref);
+        if (snap.exists()) {
+          currentUser = user;
+          currentUserData = snap.data();
+          if (!currentUserData.nick) currentUserData.nick = user.displayName || 'Игрок';
+          hideMenu();
+          authOverlay.classList.remove('show');
+          updateMenuText();
+          showMenu();
+        } else {
+          await window.FB.signOut(window.FB.auth);
+        }
+      } catch (e) {
+        console.error(e);
+        currentUser = null;
+        currentUserData = null;
+        showAuth();
+      }
+    } else {
+      currentUser = null;
+      currentUserData = null;
+      showAuth();
+    }
+  });
+}
+
+if (window.FB && window.FB.ready) fbInit();
+else window.addEventListener('fb-ready', fbInit);
+
+// ==================== СТАРТ ====================
+try {
+  initGame();
+  updateHud();
+  refreshTheme();
+  requestAnimationFrame(loop);
+} catch (e) {
+  console.error('init error', e);
+}
+</script>
+</body>
+</html>
